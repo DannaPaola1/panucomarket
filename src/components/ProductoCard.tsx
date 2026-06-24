@@ -1,17 +1,54 @@
 'use client'
 import { Producto } from '@/types'
 import { MessageCircle, Share2, Heart, Pause, Play, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useProductos } from '@/context/ProductosContext'
+import { useAuth } from '@/context/AuthContext'
+import { supabase } from '@/lib/supabase'
 
 export default function ProductoCard({ producto, editable }: { producto: Producto, editable?: boolean }) {
   const { pausarProducto, eliminarProducto } = useProductos()
+  const { user } = useAuth()
   const [liked, setLiked] = useState(false)
-  const [likes, setLikes] = useState(Math.floor(Math.random() * 20))
+  const [likes, setLikes] = useState(0)
+  const [loadingLike, setLoadingLike] = useState(false)
 
-  const handleLike = () => {
-    setLiked(!liked)
-    setLikes(prev => liked ? prev - 1 : prev + 1)
+  useEffect(() => {
+    cargarLikes()
+  }, [producto.id, user])
+
+  const cargarLikes = async () => {
+    const { count } = await supabase
+      .from('likes')
+      .select('*', { count: 'exact', head: true })
+      .eq('producto_id', producto.id)
+    setLikes(count || 0)
+
+    if (user) {
+      const { data } = await supabase
+        .from('likes')
+        .select('id')
+        .eq('producto_id', producto.id)
+        .eq('usuario_id', user.id)
+        .single()
+      setLiked(!!data)
+    }
+  }
+
+  const handleLike = async () => {
+    if (!user) { alert('Inicia sesión para dar like'); return }
+    if (loadingLike) return
+    setLoadingLike(true)
+    if (liked) {
+      await supabase.from('likes').delete().eq('producto_id', producto.id).eq('usuario_id', user.id)
+      setLiked(false)
+      setLikes(prev => prev - 1)
+    } else {
+      await supabase.from('likes').insert({ producto_id: producto.id, usuario_id: user.id })
+      setLiked(true)
+      setLikes(prev => prev + 1)
+    }
+    setLoadingLike(false)
   }
 
   const handleShare = () => {
@@ -30,16 +67,11 @@ export default function ProductoCard({ producto, editable }: { producto: Product
 
   return (
     <div style={{
-      background: 'white',
-      borderRadius: 16,
-      overflow: 'hidden',
+      background: 'white', borderRadius: 16, overflow: 'hidden',
       boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
       opacity: producto.estado === 'pausado' ? 0.6 : 1,
-      display: 'flex',
-      flexDirection: 'column',
-      width: '100%',
+      display: 'flex', flexDirection: 'column', width: '100%',
     }}>
-      {/* Imagen fija */}
       <div style={{ position: 'relative', height: 200, flexShrink: 0 }}>
         <img
           src={producto.foto_url || 'https://via.placeholder.com/400x200?text=Sin+foto'}
@@ -61,9 +93,7 @@ export default function ProductoCard({ producto, editable }: { producto: Product
         )}
       </div>
 
-      {/* Contenido */}
       <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-        {/* Nombre y precio */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6, gap: 8 }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {producto.nombre}
@@ -73,18 +103,14 @@ export default function ProductoCard({ producto, editable }: { producto: Product
           </span>
         </div>
 
-        {/* Descripción */}
         <p style={{ fontSize: 13, color: '#64748b', marginBottom: 10, lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
           {producto.descripcion}
         </p>
 
         {producto.cantidad_disponible && (
-          <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>
-            Disponibles: {producto.cantidad_disponible}
-          </p>
+          <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>Disponibles: {producto.cantidad_disponible}</p>
         )}
 
-        {/* Vendedor */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 10, borderTop: '1px solid #f1f5f9', marginBottom: 12 }}>
           <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#15803d', flexShrink: 0 }}>
             {producto.vendedor?.nombre?.[0]?.toUpperCase() || 'V'}
@@ -94,34 +120,28 @@ export default function ProductoCard({ producto, editable }: { producto: Product
           </span>
         </div>
 
-        {/* Botones */}
         {editable ? (
           <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={() => pausarProducto(producto.id)}
+            <button onClick={() => pausarProducto(producto.id)}
               style={{ flex: 1, background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 600, fontSize: 13 }}>
               {producto.estado === 'activo' ? <><Pause size={14} /> Pausar</> : <><Play size={14} /> Activar</>}
             </button>
-            <button
-              onClick={() => eliminarProducto(producto.id)}
+            <button onClick={() => eliminarProducto(producto.id)}
               style={{ flex: 1, background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 600, fontSize: 13 }}>
               <Trash2 size={14} /> Eliminar
             </button>
           </div>
         ) : (
           <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={handleWhatsApp}
+            <button onClick={handleWhatsApp}
               style={{ flex: 1, background: '#16a34a', color: 'white', border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 600, fontSize: 13 }}>
               <MessageCircle size={15} /> Contactar
             </button>
-            <button
-              onClick={handleLike}
+            <button onClick={handleLike} disabled={loadingLike}
               style={{ background: liked ? '#fee2e2' : '#f1f5f9', border: 'none', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: liked ? '#dc2626' : '#64748b', flexShrink: 0 }}>
               <Heart size={15} fill={liked ? '#dc2626' : 'transparent'} color={liked ? '#dc2626' : '#64748b'} /> {likes}
             </button>
-            <button
-              onClick={handleShare}
+            <button onClick={handleShare}
               style={{ background: '#f1f5f9', border: 'none', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexShrink: 0 }}>
               <Share2 size={15} />
             </button>
