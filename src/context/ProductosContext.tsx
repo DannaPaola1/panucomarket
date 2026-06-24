@@ -46,9 +46,12 @@ export function ProductosProvider({ children }: { children: ReactNode }) {
       try { foto_url = await subirFoto(foto, p.vendedor_id) }
       catch { return false }
     }
-    const { error } = await supabase.from('productos').insert({ ...p, foto_url })
-    if (!error) await cargar()
-    return !error
+    // Extraer vendedor del objeto para no enviarlo a Supabase
+    const { vendedor, ...datos } = p
+    const { error } = await supabase.from('productos').insert({ ...datos, foto_url })
+    if (error) { console.error(error); return false }
+    await cargar()
+    return true
   }
 
   const pausarProducto = async (id: string) => {
