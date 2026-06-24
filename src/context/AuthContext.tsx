@@ -32,7 +32,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session?.user) cargarPerfil(session.user.id)
       else setUser(null)
     })
-    return () => subscription.unsubscribe()
+
+    // Recarga el perfil cada 30 segundos para detectar cambios (aprobación, etc)
+    const intervalo = setInterval(async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) cargarPerfil(session.user.id)
+    }, 30000)
+
+    return () => {
+      subscription.unsubscribe()
+      clearInterval(intervalo)
+    }
   }, [])
 
   const login = async (correo: string, password: string) => {
